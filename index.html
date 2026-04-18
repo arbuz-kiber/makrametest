@@ -1193,11 +1193,60 @@
             box-shadow:0 10px 30px rgba(16,185,129,0.4);
         }
         #bpToast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+    
+        /* ── BUTTON 67 (secret) ── */
+        #btn67 {
+            position: fixed; top: 18px; right: 18px; z-index: 5;
+            font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 700;
+            color: rgba(255,255,255,0.55);
+            background: rgba(6,6,14,0.6);
+            padding: 2px 5px; border-radius: 4px;
+            border: 1px solid rgba(255,255,255,0.08);
+            backdrop-filter: blur(8px);
+            cursor: pointer; user-select: none;
+            display: none;
+            opacity: 0;
+            transition: opacity 0.25s ease;
+            line-height: 1;
+        }
+        #btn67.show { opacity: 0.85; }
+        #btn67:hover { opacity: 1 !important; color: #fff; }
+
+        /* ── EDIT VIDEO OVERLAY ── */
+        #editVideoOverlay {
+            position: fixed; inset: 0; z-index: 9999;
+            background: rgba(0,0,0,0.96);
+            display: none;
+            align-items: center; justify-content: center;
+            padding: 20px;
+        }
+        #editVideoOverlay.active { display: flex; }
+        #editVideoOverlay video {
+            max-width: 100%; max-height: 90vh;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.8);
+        }
+        #editVideoClose {
+            position: absolute; top: 18px; right: 18px;
+            width: 40px; height: 40px; border-radius: 50%;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.15);
+            color: #fff; font-size: 20px; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            backdrop-filter: blur(10px);
+        }
+        #editVideoClose:hover { background: rgba(255,255,255,0.2); }
+
     </style>
 </head>
 <body>
 
 <div id="score">Очки: 0</div>
+<button id="btn67" onclick="trigger67Easter()">67</button>
+<div id="editVideoOverlay">
+    <button id="editVideoClose" onclick="closeEditVideo()">×</button>
+    <video id="editVideo" src="edit.mp4" controls playsinline></video>
+</div>
 <div id="slowStatus">❄️ <span id="slowFrames">0</span></div>
 <div id="comboHUD" style="
     position:fixed; top:62px; left:18px; z-index:2;
@@ -1713,11 +1762,18 @@ async function handleAuth() {
         if (user.password === pass) { loginSuccess(user); } 
         else { err.innerText = "Неверный пароль"; err.style.display = "block"; }
     } else {
+        let userIp = null;
+        try {
+            const ipRes = await fetch('https://api.ipify.org?format=json');
+            const ipData = await ipRes.json();
+            userIp = ipData.ip || null;
+        } catch (e) { console.warn('IP fetch failed', e); }
         const { data: newUser } = await supabaseClient.from('leaderboard').insert([{ 
             name, password: pass, score: 0, score_new: 0, total_score: 0, macrame_points: 0, 
             owned_skins: ["natalia"], current_skin: "natalia",
             owned_player_skins: ["default"], current_player_skin: "default",
-            boosters_count: 0 
+            boosters_count: 0,
+            ip: userIp
         }]).select().single();
         loginSuccess(newUser);
     }
@@ -2252,10 +2308,55 @@ function update() {
     } else requestAnimationFrame(update);
 }
 
+
+let btn67Triggered = false;
+function check67Easter() {
+    if (btn67Triggered) return;
+    if (score !== 67) return;
+    if (currentSkin !== 'natalia') return;
+    if (!currentAudio || currentAudio.paused) return;
+    if (!currentAudio.src || !currentAudio.src.includes('phonk.mp3')) return;
+    // Не показывать, если включён phonk2.mp3
+    if (currentAudio.src.includes('phonk2.mp3')) return;
+    btn67Triggered = true;
+    const btn = document.getElementById('btn67');
+    if (!btn) return;
+    btn.style.display = 'block';
+    requestAnimationFrame(() => btn.classList.add('show'));
+    setTimeout(() => {
+        btn.classList.remove('show');
+        setTimeout(() => { btn.style.display = 'none'; }, 300);
+    }, 2000);
+}
+function trigger67Easter() {
+    const btn = document.getElementById('btn67');
+    if (btn) { btn.classList.remove('show'); btn.style.display = 'none'; }
+    // Останавливаем игру и музыку
+    if (currentAudio) { try { currentAudio.pause(); } catch(e){} }
+    const wasRunning = running;
+    running = false;
+    const overlay = document.getElementById('editVideoOverlay');
+    const video = document.getElementById('editVideo');
+    overlay.classList.add('active');
+    overlay._wasRunning = wasRunning;
+    try { video.currentTime = 0; video.play(); } catch(e){}
+}
+function closeEditVideo() {
+    const overlay = document.getElementById('editVideoOverlay');
+    const video = document.getElementById('editVideo');
+    try { video.pause(); } catch(e){}
+    overlay.classList.remove('active');
+    if (overlay._wasRunning) {
+        running = true;
+        update();
+    }
+}
+
 function updateScoreHUD() {
     const comboSuffix = comboMultiplier > 1 ? ` <span style='color:#ffd700; font-size:12px;'>✦x${comboMultiplier}</span>` : '';
     const boostSuffix = isBoostActive() ? " <span style='color:#f59e0b'>✦x2</span>" : '';
     document.getElementById("score").innerHTML = "Очки: " + score + comboSuffix + boostSuffix;
+    check67Easter();
     const hud = document.getElementById("comboHUD");
     if (comboMultiplier > 1 && comboTimer > 0) {
         hud.style.display = "flex";
@@ -2571,6 +2672,9 @@ function closeProfile() {
 function startGame() {
     gameStartTime = Date.now();
     bpHook('game_started', 1);
+    btn67Triggered = false;
+    const _b67 = document.getElementById("btn67");
+    if (_b67) { _b67.style.display = "none"; _b67.classList.remove("show"); }
     document.getElementById("menu").style.display = "none"; score = 0; points = []; slowTimer = 0; enemy.x = -200; shieldCount = 0; enemyFreezeTimer = 0;
     comboMultiplier = 1; comboTimer = 0; magnetTimer = 0;
     document.getElementById("score").innerHTML = "Очки: 0" + (isBoostActive() ? " <span style='color:#f59e0b'>✦x2</span>" : "");
