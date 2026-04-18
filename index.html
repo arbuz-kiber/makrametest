@@ -1279,6 +1279,10 @@
                     <span class="nb-icon">⚙️</span>
                     <span class="nb-label">Настройки</span>
                 </button>
+                <button class="nav-btn" onclick="openTransfer()" style="--nb-c1:#10b981;--nb-c2:#34d399; grid-column: span 2;">
+                    <span class="nb-icon">🤝</span>
+                    <span class="nb-label">Передать другу</span>
+                </button>
                 <button class="nav-btn" onclick="openBattlePass()" style="--nb-c1:#7c3aed;--nb-c2:#ec4899; grid-column: span 2;">
                     <span class="nb-icon">🎟</span>
                     <span class="nb-label">Макраме Наталии · Пропуск</span>
@@ -1376,6 +1380,50 @@
             </div>
         </div>
         <button onclick="closeOverlay('settings')" class="btn-back" style="margin-top:12px;">← Назад</button>
+    </div>
+</div>
+
+
+<!-- TRANSFER -->
+<div id="transfer" class="overlay" style="display:none;">
+    <div class="inner-card">
+        <h2 class="inner-title">🤝 Передать другу</h2>
+        <p style="color:var(--text-muted); font-size:12px; margin:-6px 0 14px 0; text-align:center;">
+            Комиссия 5% (защита от абуза)
+        </p>
+
+        <div class="admin-search-box" style="margin-bottom:12px;">
+            <input type="text" id="transferSearchInput" placeholder="Ник получателя..." onkeydown="if(event.key==='Enter')transferSearch()">
+            <button onclick="transferSearch()" class="btn-admin-purple">НАЙТИ</button>
+        </div>
+        <div id="transferTargetInfo" style="font-size:12px; color:#34d399; margin-bottom:12px; font-weight:700; min-height:18px;"></div>
+        <div id="transferSearchResults" style="margin-bottom:10px;"></div>
+
+        <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); border-radius:12px; padding:12px; margin-bottom:12px; font-size:12px; color:var(--text-muted);">
+            <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                <span>🧶 Твои макраме:</span><span id="transferMyMacrame" style="color:#fbbf24; font-weight:800;">0</span>
+            </div>
+            <div style="display:flex; justify-content:space-between;">
+                <span>⚡ Твои бустеры x2:</span><span id="transferMyBoosters" style="color:#6ee7b7; font-weight:800;">0</span>
+            </div>
+        </div>
+
+        <div class="admin-action-label">🧶 Передать макраме</div>
+        <div class="admin-action-row" style="margin-bottom:6px;">
+            <input type="number" id="transferMacrameAmount" placeholder="Сколько макраме" min="1">
+            <button class="btn-admin-give" onclick="transferDoMacrame()">ОТПРАВИТЬ</button>
+        </div>
+        <div id="transferMacrameHint" style="font-size:11px; color:var(--text-dim); margin-bottom:14px;">Получатель получит: —</div>
+
+        <div class="admin-action-label">⚡ Передать бустеры x2</div>
+        <div class="admin-action-row" style="margin-bottom:14px;">
+            <input type="number" id="transferBoostersAmount" placeholder="Кол-во бустеров" min="1">
+            <button class="btn-admin-give" onclick="transferDoBoosters()">ОТПРАВИТЬ</button>
+        </div>
+
+        <div id="transferMsg" style="min-height:18px; text-align:center; font-size:12px; font-weight:700; margin-bottom:10px;"></div>
+
+        <button onclick="closeOverlay('transfer')" class="btn-back" style="margin-top:0;">← Назад</button>
     </div>
 </div>
 
@@ -1613,7 +1661,9 @@ const ENEMY_SKINS = {
 
 const PLAYER_SKINS = {
     "default": { name: "Стандарт", img: "игрок.jpg", price: 0 },
-    "skin67":  { name: "Скин 67",  img: "67.png",    price: 6700 }
+    "skin67":  { name: "Скин 67",  img: "67.png",    price: 6700 },
+    // Эксклюзивный скин — выдаётся ТОЛЬКО админом. price:null + exclusive => не виден в магазине.
+    "los_parochka": { name: "Лос Парочка", img: "los_parochka.jpg", price: null, exclusive: true }
 };
 
 function isBoostActive() { return boostUntil && new Date(boostUntil) > new Date(); }
@@ -1805,13 +1855,17 @@ function renderShop(tab) {
 
     } else if (tab === 'player') {
         Object.keys(PLAYER_SKINS).forEach(id => {
-            const s = PLAYER_SKINS[id], isOwned = ownedPlayerSkins.includes(id), isCurrent = currentPlayerSkin === id;
+            const s = PLAYER_SKINS[id];
+            // Эксклюзивные скины (выдаются админом) не показываем, если их нет у игрока
+            if (s.exclusive && !ownedPlayerSkins.includes(id)) return;
+            const isOwned = ownedPlayerSkins.includes(id), isCurrent = currentPlayerSkin === id;
+            const priceLabel = isOwned ? "✅ В коллекции" : (s.price == null ? "🔒 Эксклюзив" : "💰 " + s.price + " 🧶");
             container.innerHTML += `
                 <div class="shop-item">
                     <img src="${s.img}" class="shop-img">
                     <div class="shop-info">
                         <div class="shop-name">${s.name}</div>
-                        <div class="shop-price ${isOwned ? 'owned' : ''}">${isOwned ? "✅ В коллекции" : "💰 " + s.price + " 🧶"}</div>
+                        <div class="shop-price ${isOwned ? 'owned' : ''}">${priceLabel}</div>
                     </div>
                     <button class="btn-buy-small" onclick="${isOwned ? `selectPlayerSkin('${id}')` : `buyPlayerSkin('${id}')`}" ${isCurrent ? 'disabled' : ''}>${isCurrent ? "✓ ВЫБРАН" : (isOwned ? "ВЗЯТЬ" : "КУПИТЬ")}</button>
                 </div>`;
@@ -1849,8 +1903,10 @@ async function selectEnemySkin(id) {
 
 // Player skin actions
 async function buyPlayerSkin(id) {
-    if (totalMacrame >= PLAYER_SKINS[id].price) {
-        totalMacrame -= PLAYER_SKINS[id].price; ownedPlayerSkins.push(id);
+    const s = PLAYER_SKINS[id];
+    if (!s || s.price == null) { alert("Этот скин нельзя купить — он выдаётся только админом."); return; }
+    if (totalMacrame >= s.price) {
+        totalMacrame -= s.price; ownedPlayerSkins.push(id);
         await supabaseClient.from('leaderboard').update({ macrame_points: totalMacrame, owned_player_skins: ownedPlayerSkins }).eq('id', currentID);
         updateMacrameUI(); renderShop('player');
     } else { alert("Недостаточно макраме!"); }
@@ -2585,12 +2641,27 @@ function adminShowMsg(text, type = 'success') {
     el._t = setTimeout(() => { el.style.display = 'none'; }, 3000);
 }
 
+// Экранирование %, _, \ для PostgREST ilike-паттернов
+function adminEscapeLike(s) { return String(s).replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_'); }
+
 async function adminSearchPlayer() {
     const name = document.getElementById("adminSearchInput").value.trim();
     if (!name) return;
     const res = document.getElementById("adminPlayerResult");
     res.innerHTML = `<div class="admin-notice">Поиск...</div>`;
-    const { data: u } = await supabaseClient.from("leaderboard").select("*").ilike("name", name).maybeSingle();
+    const safe = adminEscapeLike(name);
+    // 1) Точное совпадение без учёта регистра
+    let { data: u } = await supabaseClient.from("leaderboard").select("*").ilike("name", safe).maybeSingle();
+    // 2) Fallback: подстрока без учёта регистра (для случаев с лишними пробелами/частичным вводом)
+    if (!u) {
+        const { data: list } = await supabaseClient.from("leaderboard").select("*").ilike("name", `%${safe}%`).limit(10);
+        if (list && list.length === 1) u = list[0];
+        else if (list && list.length > 1) {
+            res.innerHTML = `<div class="admin-notice">Найдено ${list.length} совпадений — выберите:</div>` +
+                list.map(p => `<div class="online-row" onclick="adminQuickSearch('${p.name.replace(/'/g, "\\'")}')"><div><div class="online-row-name">${p.name}</div><div class="online-row-time">ID: ${p.id}</div></div></div>`).join('');
+            return;
+        }
+    }
     if (!u) { res.innerHTML = `<div class="admin-notice">Игрок не найден</div>`; return; }
     adminRenderPlayerProfile(u, res);
 }
@@ -2763,9 +2834,15 @@ function adminRenderAllList(players) {
 async function adminLoadGiveTarget() {
     const name = document.getElementById("adminGiveTarget").value.trim();
     if (!name) return;
-    const { data: u } = await supabaseClient.from("leaderboard").select("*").ilike("name", name).maybeSingle();
+    const safe = adminEscapeLike(name);
+    let { data: u } = await supabaseClient.from("leaderboard").select("*").ilike("name", safe).maybeSingle();
+    if (!u) {
+        const { data: list } = await supabaseClient.from("leaderboard").select("*").ilike("name", `%${safe}%`).limit(2);
+        if (list && list.length === 1) u = list[0];
+    }
     if (!u) { adminShowMsg("Игрок не найден", "error"); adminCurrentTarget = null; document.getElementById("adminGiveTargetInfo").textContent = ""; return; }
     adminCurrentTarget = u;
+    document.getElementById("adminGiveTarget").value = u.name;
     document.getElementById("adminGiveTargetInfo").innerHTML = 
         `✅ Выбран: <span style="color:#e879f9;">${u.name}</span> · макраме: <span style="color:#fbbf24;">${u.macrame_points || 0}</span> · бустеры: <span style="color:#6ee7b7;">${u.boosters_count || 0}</span>`;
     adminInitSkinSelectors();
@@ -3619,6 +3696,152 @@ function bpToast(msg) {
 }
 
 initBgCanvas();
+
+/* ============ TRANSFER (player-to-player) ============ */
+const TRANSFER_FEE = 0.05; // 5%
+let transferTarget = null;
+
+function openTransfer() {
+    if (!currentID) { alert("Сначала войди в аккаунт"); return; }
+    document.getElementById("menu").style.display = "none";
+    document.getElementById("transfer").style.display = "flex";
+    transferTarget = null;
+    document.getElementById("transferTargetInfo").innerHTML = "";
+    document.getElementById("transferSearchResults").innerHTML = "";
+    document.getElementById("transferSearchInput").value = "";
+    document.getElementById("transferMacrameAmount").value = "";
+    document.getElementById("transferBoostersAmount").value = "";
+    document.getElementById("transferMsg").innerHTML = "";
+    document.getElementById("transferMacrameHint").innerText = "Получатель получит: —";
+    document.getElementById("transferMyMacrame").innerText = totalMacrame;
+    document.getElementById("transferMyBoosters").innerText = boostersCount;
+}
+
+function transferEscapeLike(s) { return String(s).replace(/[%_\\]/g, '\\$&'); }
+
+async function transferSearch() {
+    const raw = (document.getElementById("transferSearchInput").value || "").trim();
+    const info = document.getElementById("transferTargetInfo");
+    const results = document.getElementById("transferSearchResults");
+    transferTarget = null;
+    results.innerHTML = "";
+    if (!raw) { info.innerHTML = "<span style='color:#f87171;'>Введи ник</span>"; return; }
+    if (raw.toLowerCase() === (playerName || "").toLowerCase()) {
+        info.innerHTML = "<span style='color:#f87171;'>Нельзя передать самому себе</span>"; return;
+    }
+    const safe = transferEscapeLike(raw);
+    let { data: u } = await supabaseClient.from("leaderboard").select("id, name, macrame_points, boosters_count").ilike("name", safe).maybeSingle();
+    if (!u) {
+        const { data: list } = await supabaseClient.from("leaderboard").select("id, name, macrame_points, boosters_count").ilike("name", `%${safe}%`).limit(10);
+        if (!list || list.length === 0) { info.innerHTML = "<span style='color:#f87171;'>Игрок не найден</span>"; return; }
+        if (list.length === 1) { u = list[0]; }
+        else {
+            info.innerHTML = `Найдено: ${list.length}. Выбери:`;
+            results.innerHTML = list.map(p => `
+                <div onclick='transferPick(${JSON.stringify(p)})' style="cursor:pointer; padding:8px 10px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.06); border-radius:10px; margin-bottom:6px; font-size:12px; font-weight:700; display:flex; justify-content:space-between;">
+                    <span>${p.name}</span><span style="color:#fbbf24;">${p.macrame_points || 0} 🧶</span>
+                </div>`).join("");
+            return;
+        }
+    }
+    transferPick(u);
+}
+
+function transferPick(u) {
+    if (u.name && u.name.toLowerCase() === (playerName || "").toLowerCase()) {
+        document.getElementById("transferTargetInfo").innerHTML = "<span style='color:#f87171;'>Нельзя передать самому себе</span>";
+        return;
+    }
+    transferTarget = u;
+    document.getElementById("transferSearchResults").innerHTML = "";
+    document.getElementById("transferTargetInfo").innerHTML = `✅ Получатель: <span style="color:#34d399;">${u.name}</span>`;
+    transferUpdateHint();
+}
+
+function transferUpdateHint() {
+    const amt = parseInt(document.getElementById("transferMacrameAmount").value) || 0;
+    const net = amt > 0 ? Math.floor(amt * (1 - TRANSFER_FEE)) : 0;
+    document.getElementById("transferMacrameHint").innerText =
+        amt > 0 ? `Получатель получит: ${net} 🧶 (комиссия ${amt - net})` : "Получатель получит: —";
+}
+document.addEventListener("DOMContentLoaded", () => {
+    const el = document.getElementById("transferMacrameAmount");
+    if (el) el.addEventListener("input", transferUpdateHint);
+});
+
+function transferShowMsg(text, ok) {
+    const m = document.getElementById("transferMsg");
+    m.innerHTML = `<span style="color:${ok ? '#34d399' : '#f87171'};">${text}</span>`;
+}
+
+async function transferDoMacrame() {
+    if (!transferTarget) { transferShowMsg("Сначала выбери получателя", false); return; }
+    const amt = parseInt(document.getElementById("transferMacrameAmount").value);
+    if (!amt || amt <= 0) { transferShowMsg("Введи положительное число", false); return; }
+    if (amt > totalMacrame) { transferShowMsg("У тебя недостаточно макраме", false); return; }
+
+    const net = Math.floor(amt * (1 - TRANSFER_FEE));
+    if (net <= 0) { transferShowMsg("Слишком маленькая сумма", false); return; }
+
+    // Re-fetch fresh balances to avoid race conditions
+    const { data: me } = await supabaseClient.from("leaderboard").select("macrame_points").eq("id", currentID).maybeSingle();
+    const { data: tg } = await supabaseClient.from("leaderboard").select("macrame_points").eq("id", transferTarget.id).maybeSingle();
+    if (!me || !tg) { transferShowMsg("Ошибка получения данных", false); return; }
+    if ((me.macrame_points || 0) < amt) { transferShowMsg("Недостаточно макраме", false); return; }
+
+    const newMine = (me.macrame_points || 0) - amt;
+    const newTheirs = (tg.macrame_points || 0) + net;
+
+    const { error: e1 } = await supabaseClient.from("leaderboard").update({ macrame_points: newMine }).eq("id", currentID);
+    if (e1) { transferShowMsg("Ошибка списания", false); return; }
+    const { error: e2 } = await supabaseClient.from("leaderboard").update({ macrame_points: newTheirs }).eq("id", transferTarget.id);
+    if (e2) {
+        // rollback
+        await supabaseClient.from("leaderboard").update({ macrame_points: me.macrame_points }).eq("id", currentID);
+        transferShowMsg("Ошибка зачисления, откат", false); return;
+    }
+
+    totalMacrame = newMine;
+    updateMacrameUI();
+    document.getElementById("transferMyMacrame").innerText = totalMacrame;
+    document.getElementById("transferMacrameAmount").value = "";
+    transferUpdateHint();
+    transferShowMsg(`✅ Отправлено ${net} 🧶 → ${transferTarget.name} (комиссия ${amt - net})`, true);
+}
+
+async function transferDoBoosters() {
+    if (!transferTarget) { transferShowMsg("Сначала выбери получателя", false); return; }
+    const amt = parseInt(document.getElementById("transferBoostersAmount").value);
+    if (!amt || amt <= 0) { transferShowMsg("Введи положительное число", false); return; }
+    if (amt > boostersCount) { transferShowMsg("У тебя недостаточно бустеров", false); return; }
+
+    // 5% fee rounded down (минимум: каждый 20-й сжигается)
+    const fee = Math.floor(amt * TRANSFER_FEE);
+    const net = amt - fee;
+    if (net <= 0) { transferShowMsg("Слишком мало для передачи (мин. 1 после комиссии)", false); return; }
+
+    const { data: me } = await supabaseClient.from("leaderboard").select("boosters_count").eq("id", currentID).maybeSingle();
+    const { data: tg } = await supabaseClient.from("leaderboard").select("boosters_count").eq("id", transferTarget.id).maybeSingle();
+    if (!me || !tg) { transferShowMsg("Ошибка получения данных", false); return; }
+    if ((me.boosters_count || 0) < amt) { transferShowMsg("Недостаточно бустеров", false); return; }
+
+    const newMine = (me.boosters_count || 0) - amt;
+    const newTheirs = (tg.boosters_count || 0) + net;
+
+    const { error: e1 } = await supabaseClient.from("leaderboard").update({ boosters_count: newMine }).eq("id", currentID);
+    if (e1) { transferShowMsg("Ошибка списания", false); return; }
+    const { error: e2 } = await supabaseClient.from("leaderboard").update({ boosters_count: newTheirs }).eq("id", transferTarget.id);
+    if (e2) {
+        await supabaseClient.from("leaderboard").update({ boosters_count: me.boosters_count }).eq("id", currentID);
+        transferShowMsg("Ошибка зачисления, откат", false); return;
+    }
+
+    boostersCount = newMine;
+    document.getElementById("transferMyBoosters").innerText = boostersCount;
+    document.getElementById("transferBoostersAmount").value = "";
+    transferShowMsg(`✅ Отправлено ${net} ⚡ → ${transferTarget.name}${fee ? ` (комиссия ${fee})` : ''}`, true);
+}
+
 </script>
 </body>
 </html>
