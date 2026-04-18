@@ -3024,59 +3024,10 @@ async function adminLoadStats() {
 
 // END ADMIN PANEL ────────────────────────────────────────────────────────────
 checkAutoLogin(); initOnline(); window.dispatchEvent(new Event('resize'));
-// ── INPUT (mobile-friendly: finger doesn't cover the player) ──────────────
-const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
-
-// Target position the player smoothly moves toward.
-let targetX = null, targetY = null;
-// Vertical offset so the player sits ABOVE the finger and stays visible.
-// Scales with screen height; clamped to a reasonable range.
-function getTouchOffsetY() {
-    return Math.max(70, Math.min(140, window.innerHeight * 0.13));
-}
-
-// Desktop: precise mouse follow (unchanged behavior).
-window.addEventListener("mousemove", (e) => {
-    if (isTouchDevice) return;
-    player.x = e.clientX;
-    player.y = e.clientY;
-    targetX = player.x; targetY = player.y;
-});
-
-function setTouchTarget(touch) {
-    targetX = touch.clientX;
-    targetY = touch.clientY - getTouchOffsetY();
-    // Keep target inside the canvas so the player never hides off-screen.
-    const pad = player.r + 4;
-    if (targetX < pad) targetX = pad;
-    if (targetX > canvas.width  - pad) targetX = canvas.width  - pad;
-    if (targetY < pad) targetY = pad;
-    if (targetY > canvas.height - pad) targetY = canvas.height - pad;
-}
-
-window.addEventListener("touchstart", (e) => {
-    if (!running) return;
-    setTouchTarget(e.touches[0]);
-    e.preventDefault();
+window.addEventListener("mousemove", (e) => { player.x = e.clientX; player.y = e.clientY; });
+window.addEventListener("touchmove", (e) => { 
+    if (running) { player.x = e.touches[0].clientX; player.y = e.touches[0].clientY; e.preventDefault(); }
 }, {passive:false});
-
-window.addEventListener("touchmove", (e) => {
-    if (!running) return;
-    setTouchTarget(e.touches[0]);
-    e.preventDefault();
-}, {passive:false});
-
-// Smoothly move player toward target each frame (mobile only).
-// Tied to rAF so it stays in sync with the game loop.
-(function followLoop() {
-    if (isTouchDevice && running && targetX !== null) {
-        // Lerp factor — higher = snappier, lower = smoother. 0.28 feels responsive.
-        const k = 0.28;
-        player.x += (targetX - player.x) * k;
-        player.y += (targetY - player.y) * k;
-    }
-    requestAnimationFrame(followLoop);
-})();
 
 // ── BACKGROUND PARTICLES ──────────────────────────────────────────────────
 function initBgCanvas() {
